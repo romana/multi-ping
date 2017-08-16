@@ -50,11 +50,11 @@ respond in time. The results may be processed like this:
         ...
 
 Note that `send()` can be called multiple times. If there are any addresses
-left, for which no response has been received yet, then this will resend pings
+left for which no response has been received yet then this will resend pings
 to those remaining addresses.
 
-A `multi_ping()` function is provided, which implements retries and delivers
-results in a single function call:
+A convenient `multi_ping()` function is provided, which implements retries and
+delivers results in a single function call:
 
     from multiping import multi_ping
 
