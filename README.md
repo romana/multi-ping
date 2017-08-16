@@ -4,8 +4,9 @@ MultiPing is a Python library to monitor one or many IP addresses via ICMP echo
 (ping) requests. It supports timeouts and retries, is small and compact and
 does not rely on any 3rd party packages, aside from what's included in Python.
 
-MultiPing was developed as part of the
-[vpc-router](https://github.com/romana/vpc-router) project.
+MultiPing was developed for the
+[vpc-router](https://github.com/romana/vpc-router) project, but can be used
+on its own.
 
 ## Installation
 
