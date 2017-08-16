@@ -1,8 +1,9 @@
 # MultiPing: A pure-python implemention to monitor IP addresses with pings
 
 MultiPing is a Python library to monitor one or many IP addresses via ICMP echo
-(ping) requests. It supports timeouts and retries, is small and compact and
-does not rely on any 3rd party packages, aside from what's included in Python.
+(ping) requests. It works for Python 2 and 3, supports timeouts and retries, is
+small and compact and does not rely on any 3rd party packages, aside from
+what's included in Python.
 
 It is ideally suited to monitor large numbers of hosts in clusters, but is just
 as suitable to check on a single address.
@@ -13,9 +14,38 @@ on its own.
 
 ## Installation
 
-Please run the `setup.py` file, which is included in the source code:
+After downloading the code, please run the `setup.py` file, which is included
+in the source code:
 
     python setup.py install
+
+### Inclusion in other projects
+
+If you wish to use MultiPing in your own project, you should add this line to
+your `requirements` file:
+
+    -e git+git://github.com/romana/multi-ping#egg=multiping
+
+In your own `setup.py` file, you should add:
+
+    ...
+
+    install_requires = [
+        ...
+
+        'multiping==1.0.0',
+
+        ...
+    ],
+    dependency_links = [
+        ...
+
+        "http://github.com/romana/mult-ping/tarball/master#egg=multiping-1.0.0",
+
+        ...
+    ],
+
+    ...
 
 ## Using MultiPing
 
