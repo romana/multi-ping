@@ -42,7 +42,7 @@ if __name__ == "__main__":
     print("   --- trying another receive ---")
     responses, no_responses = mp.receive(0.1)
     print("   received responses:  %s" % list(responses.keys()))
-    print("   still no responses:  %s\n" % no_responses)
+    print("   still no responses:  %s" % no_responses)
     print("")
 
     # Sometimes ICMP packets can get lost. It's easy to retry (re-send the
