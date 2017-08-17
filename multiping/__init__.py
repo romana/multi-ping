@@ -15,7 +15,7 @@ limitations under the License.
 
 """
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 import socket
 import struct
@@ -23,8 +23,10 @@ import time
 
 # Packet header operations in Python are most easiest done by using the
 # struct package and packing values according to specific formats. For
-# the ICMP header the pack format string is this.
-_ICMP_HDR_PACK_FORMAT = "BBHHH"
+# the ICMP header the pack format string is this. Note the '!' in the format
+# string: This means that all packing/unpacking correctly takes network byte
+# order into account.
+_ICMP_HDR_PACK_FORMAT = "!BBHHH"
 
 # Some offsets we use when extracting data from the header
 _ICMP_HDR_OFFSET      = 20
@@ -144,8 +146,7 @@ class MultiPing(object):
         # checksum. Need to make sure to convert checksum to network byte
         # order.
         real_header = bytearray(struct.pack(_ICMP_HDR_PACK_FORMAT,
-                                            8, 0, socket.htons(checksum),
-                                            pkt_id, 0))
+                                            8, 0, checksum, pkt_id, 0))
 
         # Full packet consists of header plus payload
         full_pkt = real_header + payload
@@ -284,12 +285,14 @@ class MultiPing(object):
 
             for pkt, resp_receive_time in pkts:
                 # Extract the ICMP ID of the response
-                pkt_id = socket.ntohs((pkt[_ICMP_ID_OFFSET] << 8) +
-                                      pkt[_ICMP_ID_OFFSET + 1])
+                pkt_id = (pkt[_ICMP_ID_OFFSET] << 8) + pkt[_ICMP_ID_OFFSET + 1]
 
                 if pkt_id in self._remaining_ids:
                     # The sending timestamp was encoded in the echo request
-                    # body and is now returned to us in the response.
+                    # body and is now returned to us in the response. Note that
+                    # network byte order doesn't matter here, since we get
+                    # exactly the order of bytes back that we originally sent
+                    # from this host.
                     payload = pkt[_ICMP_PAYLOAD_OFFSET:]
                     req_sent_time = struct.unpack(
                             "d", payload[:self._time_stamp_size])[0]
