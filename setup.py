@@ -57,6 +57,7 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: Apache Software License',
         'Operating System :: POSIX :: Linux',
-        'Topic :: System :: Monitoring'
+        'Topic :: System :: Monitoring',
+        'Topic :: Software Development :: Libraries :: Python Modules'
     ]
 )

@@ -40,7 +40,7 @@ In your own `setup.py` file, you should add:
     dependency_links = [
         ...
 
-        "http://github.com/romana/mult-ping/tarball/master#egg=multiping-1.0.0",
+        "https://github.com/romana/multi-ping/tarball/master#egg=multiping-1.0.0",
 
         ...
     ],
