@@ -15,26 +15,23 @@ limitations under the License.
 
 """
 
-import os
+from os import path
 
 from setuptools import setup, find_packages
-
+from codecs import open
 
 import multiping
 
 
-here = os.path.abspath(os.path.dirname(__file__))
+here = path.abspath(path.dirname(__file__))
 
 
-def get_readme():
-    try:
-        import pypandoc
-        return pypandoc.convert('README.md', 'rst')
-    except (IOError, ImportError):
-        return ""
-
-
-long_description = get_readme()
+try:
+    with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
+        long_description = f.read()
+except (IOError):
+    with open(path.join(here, 'README.md'), encoding='utf-8') as f:
+        long_description = f.read()
 
 
 setup(
@@ -51,7 +48,6 @@ setup(
     include_package_data = True,
     classifiers          = [
         'Programming Language :: Python',
-        'Development Status :: 5 - Stable',
         'Natural Language :: English',
         'Environment :: Plugins',
         'Intended Audience :: Developers',

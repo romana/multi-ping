@@ -14,33 +14,30 @@ on its own.
 
 ## Installation
 
+### Installation from source
+
 After downloading the code, please run the `setup.py` file, which is included
 in the source code:
 
     python setup.py install
 
-### Inclusion in other projects
+### Installation via pip
 
-If you wish to use MultiPing in your own project, you should add this line to
-your `requirements` file:
+MultiPing is available in PyPi. Therefore, you can install it simply with:
 
-    -e git+git://github.com/romana/multi-ping#egg=multiping
+    pip install multiping
 
-In your own `setup.py` file, you should add:
+### Inclusion in your own projects
+
+If you wish to use MultiPing in your own project you should add MultiPing to
+your own `setup.py` file:
 
     ...
 
     install_requires = [
         ...
 
-        'multiping==1.0.0',
-
-        ...
-    ],
-    dependency_links = [
-        ...
-
-        "https://github.com/romana/multi-ping/tarball/master#egg=multiping-1.0.0",
+        'multiping==1.0.4',
 
         ...
     ],
