@@ -14,35 +14,25 @@ on its own.
 
 ## Installation
 
-### Installation from source
-
-After downloading the code, please run the `setup.py` file, which is included
-in the source code:
-
-    python setup.py install
-
 ### Installation via pip
 
-MultiPing is available in PyPi. Therefore, you can install it simply with:
+MultiPing is available in PyPi, the Python Package Index. Therefore, you can
+install it simply with:
 
     pip install multiping
 
-### Inclusion in your own projects
+### Installation from source
 
-If you wish to use MultiPing in your own project you should add MultiPing to
-your own `setup.py` file:
+After downloading the code or cloning this repository, please run the `setup.py`
+file, which is included in the source code:
 
-    ...
+    python setup.py install
 
-    install_requires = [
-        ...
+## Contributions
 
-        'multiping==1.0.4',
-
-        ...
-    ],
-
-    ...
+We welcome any contributions, bug reports or feedback. Please use our
+[issue tracker](https://github.com/romana/multi-ping/issues) to file bugs or
+request additional features. We are happy to consider pull requests as well.
 
 ## Using MultiPing
 
