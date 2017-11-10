@@ -15,7 +15,7 @@ limitations under the License.
 
 """
 
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 import socket
 import struct
@@ -235,7 +235,7 @@ class MultiPing(object):
             # When we read in non-blocking mode, we may get this error with
             # errno 11 to indicate that no more data is available. That's ok,
             # just like the timeout.
-            if e.errno == 11:
+            if e.errno == 11 or e.errno == 10035:
                 pass
             else:
                 # We're not expecting any other socket exceptions, so we
