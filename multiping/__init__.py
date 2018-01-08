@@ -15,11 +15,12 @@ limitations under the License.
 
 """
 
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 
 import socket
 import struct
 import time
+import errno
 
 # Packet header operations in Python are most easiest done by using the
 # struct package and packing values according to specific formats. For
@@ -80,6 +81,7 @@ class MultiPing(object):
             self._sock = sock
         else:
             self._sock = self._open_icmp_socket()
+            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
 
     def _open_icmp_socket(self):
         """
@@ -235,7 +237,7 @@ class MultiPing(object):
             # When we read in non-blocking mode, we may get this error with
             # errno 11 to indicate that no more data is available. That's ok,
             # just like the timeout.
-            if e.errno == 11 or e.errno == 10035:
+            if e.errno == errno.EWOULDBLOCK:
                 pass
             else:
                 # We're not expecting any other socket exceptions, so we
