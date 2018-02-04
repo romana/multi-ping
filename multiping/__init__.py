@@ -21,6 +21,7 @@ import socket
 import struct
 import time
 import errno
+import binascii
 
 # Packet header operations in Python are most easiest done by using the
 # struct package and packing values according to specific formats. For
@@ -30,9 +31,15 @@ import errno
 _ICMP_HDR_PACK_FORMAT = "!BBHHH"
 
 # Some offsets we use when extracting data from the header
-_ICMP_HDR_OFFSET      = 20
-_ICMP_ID_OFFSET       = _ICMP_HDR_OFFSET + 4
-_ICMP_PAYLOAD_OFFSET  = _ICMP_HDR_OFFSET + 8
+_ICMP_HDR_OFFSET = 20
+_ICMP_ID_OFFSET = _ICMP_HDR_OFFSET + 4
+_ICMP_PAYLOAD_OFFSET = _ICMP_HDR_OFFSET + 8
+
+_IPV6_TYPE_OFFSET = 0
+_ICMPV6_REQUEST = 128
+_ICMPV6_REPLY = 129
+_ICMPV6_ID_OFFSET = 4
+_ICMPV6_PAYLOAD_OFFSET = 8
 
 
 class MultiPingError(Exception):
@@ -68,10 +75,12 @@ class MultiPing(object):
             raise MultiPingError("Cannot send ICMP echo request to more than "
                                  "65535 addresses at the same time.")
 
-        self._dest_addrs      = [socket.gethostbyname(d) for d in dest_addrs]
-        self._id_to_addr      = {}
-        self._remaining_ids   = None
-        self._last_used_id    = None
+        self._dest_addrs = [socket.getaddrinfo(
+            d, None)[0][4][0] for d in dest_addrs]
+
+        self._id_to_addr = {}
+        self._remaining_ids = None
+        self._last_used_id = None
         self._time_stamp_size = struct.calcsize("d")
 
         self._receive_has_been_called = False
@@ -80,18 +89,24 @@ class MultiPing(object):
         if sock:
             self._sock = sock
         else:
-            self._sock = self._open_icmp_socket()
+            self._sock = self._open_icmp_socket(socket.AF_INET)
             self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
+            self._sock6 = self._open_icmp_socket(socket.AF_INET6)
+            self._sock6.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
 
-    def _open_icmp_socket(self):
+    def _open_icmp_socket(self, family):
         """
         Opens a socket suitable for sending/receiving ICMP echo
         requests/responses.
 
         """
         try:
-            return socket.socket(socket.AF_INET, socket.SOCK_RAW,
-                                 socket.IPPROTO_ICMP)
+            if family == socket.AF_INET:
+                return socket.socket(family, socket.SOCK_RAW,
+                                     socket.IPPROTO_ICMP)
+            else:
+                return socket.socket(family, socket.SOCK_RAW,
+                                     socket.IPPROTO_ICMPV6)
         except socket.error as e:
             if e.errno == 1:
                 raise MultiPingError("Root privileges required for sending "
@@ -130,6 +145,12 @@ class MultiPing(object):
 
         """
         pkt_id = self._last_used_id
+        print "last_used_id ", pkt_id
+
+        if ':' in dest_addr:
+            icmp_request = 128
+        else:
+            icmp_request = 8
 
         # For checksum calculation we require a dummy header, with the checksum
         # field set to zero. This header consists of:
@@ -139,7 +160,7 @@ class MultiPing(object):
         # - packet id     (unsigned short)
         # - sequence  = 0 (unsigned short)  This doesn't have to be 0.
         dummy_header = bytearray(struct.pack(_ICMP_HDR_PACK_FORMAT,
-                                             8, 0, 0, pkt_id, 0))
+                                             icmp_request, 0, 0, pkt_id, 0))
 
         # Calculate the checksum over the combined dummy header and payload
         checksum = self._checksum(dummy_header + payload)
@@ -147,8 +168,9 @@ class MultiPing(object):
         # We can now create the real header, which contains the correct
         # checksum. Need to make sure to convert checksum to network byte
         # order.
+
         real_header = bytearray(struct.pack(_ICMP_HDR_PACK_FORMAT,
-                                            8, 0, checksum, pkt_id, 0))
+                                            icmp_request, 0, checksum, pkt_id, 0))
 
         # Full packet consists of header plus payload
         full_pkt = real_header + payload
@@ -158,7 +180,14 @@ class MultiPing(object):
         # for that.
         full_dest_addr = (dest_addr, 0)
 
-        self._sock.sendto(full_pkt, full_dest_addr)
+        try:
+            socket.inet_pton(socket.AF_INET6, dest_addr)
+            print "sending icmp6", dest_addr
+            self._sock6.sendto(full_pkt, full_dest_addr)
+            print "sent icmp6", dest_addr
+
+        except:
+            self._sock.sendto(full_pkt, full_dest_addr)
 
     def send(self):
         """
@@ -244,6 +273,20 @@ class MultiPing(object):
                 # re-raise in that case.
                 raise
 
+        try:
+            self._sock6.settimeout(timeout)
+            while True:
+                p = self._sock6.recv(64)
+                pkts.append((bytearray(p), time.time()))
+                self._sock6.settimeout(0)
+        except socket.timeout:
+            pass
+        except socket.error as e:
+            if e.errno == errno.EWOULDBLOCK:
+                pass
+            else:
+                raise
+
         return pkts
 
     def receive(self, timeout):
@@ -277,7 +320,7 @@ class MultiPing(object):
             raise MultiPingError("No responses pending")
 
         remaining_time = timeout
-        results        = {}
+        results = {}
 
         # Keep looping until we either have responses for all request IDs, or
         # no more time is left.
@@ -287,21 +330,37 @@ class MultiPing(object):
 
             for pkt, resp_receive_time in pkts:
                 # Extract the ICMP ID of the response
-                pkt_id = (pkt[_ICMP_ID_OFFSET] << 8) + pkt[_ICMP_ID_OFFSET + 1]
 
-                if pkt_id in self._remaining_ids:
-                    # The sending timestamp was encoded in the echo request
-                    # body and is now returned to us in the response. Note that
-                    # network byte order doesn't matter here, since we get
-                    # exactly the order of bytes back that we originally sent
-                    # from this host.
-                    payload = pkt[_ICMP_PAYLOAD_OFFSET:]
-                    req_sent_time = struct.unpack(
+                if pkt[_IPV6_TYPE_OFFSET] == _ICMPV6_REPLY:
+
+                    pkt_id = (pkt[_ICMPV6_ID_OFFSET] << 8) + \
+                        pkt[_ICMPV6_ID_OFFSET + 1]
+                    if pkt_id and pkt_id in self._remaining_ids:
+                        payload = pkt[_ICMPV6_PAYLOAD_OFFSET:]
+                        req_sent_time = struct.unpack(
                             "d", payload[:self._time_stamp_size])[0]
-                    results[self._id_to_addr[pkt_id]] = \
-                             resp_receive_time - req_sent_time
+                        results[self._id_to_addr[pkt_id]] = \
+                            resp_receive_time - req_sent_time
 
-                    self._remaining_ids.remove(pkt_id)
+                        self._remaining_ids.remove(pkt_id)
+
+                elif pkt[_IPV6_TYPE_OFFSET] != _ICMPV6_REQUEST:
+
+                    pkt_id = (pkt[_ICMP_ID_OFFSET] << 8) + \
+                        pkt[_ICMP_ID_OFFSET + 1]
+                    if pkt_id and pkt_id in self._remaining_ids:
+                        # The sending timestamp was encoded in the echo request
+                        # body and is now returned to us in the response. Note that
+                        # network byte order doesn't matter here, since we get
+                        # exactly the order of bytes back that we originally sent
+                        # from this host.
+                        payload = pkt[_ICMP_PAYLOAD_OFFSET:]
+                        req_sent_time = struct.unpack(
+                            "d", payload[:self._time_stamp_size])[0]
+                        results[self._id_to_addr[pkt_id]] = \
+                            resp_receive_time - req_sent_time
+
+                        self._remaining_ids.remove(pkt_id)
 
             # Calculate how much of the available overall timeout time is left
             end_time = time.time()
