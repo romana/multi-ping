@@ -145,7 +145,6 @@ class MultiPing(object):
 
         """
         pkt_id = self._last_used_id
-        print "last_used_id ", pkt_id
 
         if ':' in dest_addr:
             icmp_request = 128
@@ -182,9 +181,7 @@ class MultiPing(object):
 
         try:
             socket.inet_pton(socket.AF_INET6, dest_addr)
-            print "sending icmp6", dest_addr
             self._sock6.sendto(full_pkt, full_dest_addr)
-            print "sent icmp6", dest_addr
 
         except:
             self._sock.sendto(full_pkt, full_dest_addr)
