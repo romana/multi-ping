@@ -179,12 +179,16 @@ class MultiPing(object):
         # for that.
         full_dest_addr = (dest_addr, 0)
 
-        try:
-            socket.inet_pton(socket.AF_INET6, dest_addr)
-            self._sock6.sendto(full_pkt, full_dest_addr)
-
-        except:
+        if icmp_request == 8:
             self._sock.sendto(full_pkt, full_dest_addr)
+        else:
+            socket.inet_pton(socket.AF_INET6, dest_addr)
+            try:
+                self._sock6.sendto(full_pkt, full_dest_addr)
+            except:
+                # on systems without IPv6 connectivity, sendto will fail with
+                # 'No route to host'
+                pass
 
     def send(self):
         """
