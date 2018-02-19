@@ -336,7 +336,7 @@ class MultiPing(object):
             for pkt, resp_receive_time in pkts:
                 # Extract the ICMP ID of the response
 
-                pkt_id = 0
+                pkt_id = None
                 if pkt[_IPV6_TYPE_OFFSET] == _ICMPV6_ECHO_REPLY:
 
                     pkt_id = (pkt[_ICMPV6_ID_OFFSET] << 8) + \
@@ -349,7 +349,7 @@ class MultiPing(object):
                         pkt[_ICMP_ID_OFFSET + 1]
                     payload = pkt[_ICMP_PAYLOAD_OFFSET:]
 
-                if pkt_id and pkt_id in self._remaining_ids:
+                if pkt_id in self._remaining_ids:
                     # The sending timestamp was encoded in the echo request
                     # body and is now returned to us in the response. Note that
                     # network byte order doesn't matter here, since we get
