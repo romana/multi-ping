@@ -336,36 +336,31 @@ class MultiPing(object):
             for pkt, resp_receive_time in pkts:
                 # Extract the ICMP ID of the response
 
+                pkt_id = 0
                 if pkt[_IPV6_TYPE_OFFSET] == _ICMPV6_ECHO_REPLY:
 
                     pkt_id = (pkt[_ICMPV6_ID_OFFSET] << 8) + \
                         pkt[_ICMPV6_ID_OFFSET + 1]
-                    if pkt_id and pkt_id in self._remaining_ids:
-                        payload = pkt[_ICMPV6_PAYLOAD_OFFSET:]
-                        req_sent_time = struct.unpack(
-                            "d", payload[:self._time_stamp_size])[0]
-                        results[self._id_to_addr[pkt_id]] = \
-                            resp_receive_time - req_sent_time
-
-                        self._remaining_ids.remove(pkt_id)
+                    payload = pkt[_ICMPV6_PAYLOAD_OFFSET:]
 
                 elif pkt[_ICMP_HDR_OFFSET] == _ICMP_ECHO_REPLY:
 
                     pkt_id = (pkt[_ICMP_ID_OFFSET] << 8) + \
                         pkt[_ICMP_ID_OFFSET + 1]
-                    if pkt_id and pkt_id in self._remaining_ids:
-                        # The sending timestamp was encoded in the echo request
-                        # body and is now returned to us in the response. Note that
-                        # network byte order doesn't matter here, since we get
-                        # exactly the order of bytes back that we originally sent
-                        # from this host.
-                        payload = pkt[_ICMP_PAYLOAD_OFFSET:]
-                        req_sent_time = struct.unpack(
-                            "d", payload[:self._time_stamp_size])[0]
-                        results[self._id_to_addr[pkt_id]] = \
-                            resp_receive_time - req_sent_time
+                    payload = pkt[_ICMP_PAYLOAD_OFFSET:]
 
-                        self._remaining_ids.remove(pkt_id)
+                if pkt_id and pkt_id in self._remaining_ids:
+                    # The sending timestamp was encoded in the echo request
+                    # body and is now returned to us in the response. Note that
+                    # network byte order doesn't matter here, since we get
+                    # exactly the order of bytes back that we originally sent
+                    # from this host.
+                    req_sent_time = struct.unpack(
+                        "d", payload[:self._time_stamp_size])[0]
+                    results[self._id_to_addr[pkt_id]] = \
+                        resp_receive_time - req_sent_time
+
+                    self._remaining_ids.remove(pkt_id)
 
             # Calculate how much of the available overall timeout time is left
             end_time = time.time()
