@@ -31,15 +31,15 @@ import binascii
 _ICMP_HDR_PACK_FORMAT = "!BBHHH"
 
 # Some offsets we use when extracting data from the header
-_ICMP_HDR_OFFSET = 20
-_ICMP_ID_OFFSET = _ICMP_HDR_OFFSET + 4
-_ICMP_PAYLOAD_OFFSET = _ICMP_HDR_OFFSET + 8
-_ICMP_REPLY = 0
+_ICMP_HDR_OFFSET       = 20
+_ICMP_ID_OFFSET        = _ICMP_HDR_OFFSET + 4
+_ICMP_PAYLOAD_OFFSET   = _ICMP_HDR_OFFSET + 8
+_ICMP_ECHO_REPLY       = 0
 
-_IPV6_TYPE_OFFSET = 0
-_ICMPV6_REQUEST = 128
-_ICMPV6_REPLY = 129
-_ICMPV6_ID_OFFSET = 4
+_IPV6_TYPE_OFFSET      = 0
+_ICMPV6_ECHO_REQUEST   = 128
+_ICMPV6_ECHO_REPLY     = 129
+_ICMPV6_ID_OFFSET      = 4
 _ICMPV6_PAYLOAD_OFFSET = 8
 
 
@@ -76,15 +76,16 @@ class MultiPing(object):
             raise MultiPingError("Cannot send ICMP echo request to more than "
                                  "65535 addresses at the same time.")
 
-        self._dest_addrs = [socket.getaddrinfo(
+        self._dest_addrs      = [socket.getaddrinfo(
             d, None)[0][4][0] for d in dest_addrs]
 
-        self._id_to_addr = {}
-        self._remaining_ids = None
-        self._last_used_id = None
+        self._id_to_addr      = {}
+        self._remaining_ids   = None
+        self._last_used_id    = None
         self._time_stamp_size = struct.calcsize("d")
 
         self._receive_has_been_called = False
+        self._ipv6_address_present    = False
 
         # Open an ICMP socket, if we weren't provided with one already
         if sock:
@@ -147,20 +148,22 @@ class MultiPing(object):
         """
         pkt_id = self._last_used_id
 
-        if ':' in dest_addr:
-            icmp_request = 128
+        is_ipv6 = ':' in dest_addr
+        if is_ipv6:
+            self._ipv6_address_present = True
+            icmp_echo_request = _ICMPV6_ECHO_REQUEST
         else:
-            icmp_request = 8
+            icmp_echo_request = 8
 
         # For checksum calculation we require a dummy header, with the checksum
         # field set to zero. This header consists of:
-        # - ICMP type = 8 (unsigned byte)
+        # - ICMP type = 8 (v4) / 128 (v6) (unsigned byte)
         # - ICMP code = 0 (unsigned byte)
         # - checksum  = 0 (unsigned short)
         # - packet id     (unsigned short)
         # - sequence  = 0 (unsigned short)  This doesn't have to be 0.
         dummy_header = bytearray(struct.pack(_ICMP_HDR_PACK_FORMAT,
-                                             icmp_request, 0, 0, pkt_id, 0))
+                                             icmp_echo_request, 0, 0, pkt_id, 0))
 
         # Calculate the checksum over the combined dummy header and payload
         checksum = self._checksum(dummy_header + payload)
@@ -168,9 +171,8 @@ class MultiPing(object):
         # We can now create the real header, which contains the correct
         # checksum. Need to make sure to convert checksum to network byte
         # order.
-
         real_header = bytearray(struct.pack(_ICMP_HDR_PACK_FORMAT,
-                                            icmp_request, 0, checksum, pkt_id, 0))
+                                            icmp_echo_request, 0, checksum, pkt_id, 0))
 
         # Full packet consists of header plus payload
         full_pkt = real_header + payload
@@ -180,9 +182,7 @@ class MultiPing(object):
         # for that.
         full_dest_addr = (dest_addr, 0)
 
-        if icmp_request == 8:
-            self._sock.sendto(full_pkt, full_dest_addr)
-        else:
+        if is_ipv6:
             socket.inet_pton(socket.AF_INET6, dest_addr)
             try:
                 self._sock6.sendto(full_pkt, full_dest_addr)
@@ -190,6 +190,8 @@ class MultiPing(object):
                 # on systems without IPv6 connectivity, sendto will fail with
                 # 'No route to host'
                 pass
+        else:
+            self._sock.sendto(full_pkt, full_dest_addr)
 
     def send(self):
         """
@@ -275,19 +277,20 @@ class MultiPing(object):
                 # re-raise in that case.
                 raise
 
-        try:
-            self._sock6.settimeout(timeout)
-            while True:
-                p = self._sock6.recv(64)
-                pkts.append((bytearray(p), time.time()))
-                self._sock6.settimeout(0)
-        except socket.timeout:
-            pass
-        except socket.error as e:
-            if e.errno == errno.EWOULDBLOCK:
+        if self._ipv6_address_present:
+            try:
+                self._sock6.settimeout(timeout)
+                while True:
+                    p = self._sock6.recv(64)
+                    pkts.append((bytearray(p), time.time()))
+                    self._sock6.settimeout(0)
+            except socket.timeout:
                 pass
-            else:
-                raise
+            except socket.error as e:
+                if e.errno == errno.EWOULDBLOCK:
+                    pass
+                else:
+                    raise
 
         return pkts
 
@@ -322,7 +325,7 @@ class MultiPing(object):
             raise MultiPingError("No responses pending")
 
         remaining_time = timeout
-        results = {}
+        results        = {}
 
         # Keep looping until we either have responses for all request IDs, or
         # no more time is left.
@@ -333,7 +336,7 @@ class MultiPing(object):
             for pkt, resp_receive_time in pkts:
                 # Extract the ICMP ID of the response
 
-                if pkt[_IPV6_TYPE_OFFSET] == _ICMPV6_REPLY:
+                if pkt[_IPV6_TYPE_OFFSET] == _ICMPV6_ECHO_REPLY:
 
                     pkt_id = (pkt[_ICMPV6_ID_OFFSET] << 8) + \
                         pkt[_ICMPV6_ID_OFFSET + 1]
@@ -346,7 +349,7 @@ class MultiPing(object):
 
                         self._remaining_ids.remove(pkt_id)
 
-                elif pkt[_ICMP_HDR_OFFSET] == _ICMP_REPLY:
+                elif pkt[_ICMP_HDR_OFFSET] == _ICMP_ECHO_REPLY:
 
                     pkt_id = (pkt[_ICMP_ID_OFFSET] << 8) + \
                         pkt[_ICMP_ID_OFFSET + 1]
