@@ -34,6 +34,7 @@ _ICMP_HDR_PACK_FORMAT = "!BBHHH"
 _ICMP_HDR_OFFSET = 20
 _ICMP_ID_OFFSET = _ICMP_HDR_OFFSET + 4
 _ICMP_PAYLOAD_OFFSET = _ICMP_HDR_OFFSET + 8
+_ICMP_REPLY = 0
 
 _IPV6_TYPE_OFFSET = 0
 _ICMPV6_REQUEST = 128
@@ -345,7 +346,7 @@ class MultiPing(object):
 
                         self._remaining_ids.remove(pkt_id)
 
-                elif pkt[_IPV6_TYPE_OFFSET] != _ICMPV6_REQUEST:
+                elif pkt[_ICMP_HDR_OFFSET] == _ICMP_REPLY:
 
                     pkt_id = (pkt[_ICMP_ID_OFFSET] << 8) + \
                         pkt[_ICMP_ID_OFFSET + 1]
