@@ -47,7 +47,8 @@ Here is an example of how to use MultiPing in your own code:
     from multiping import MultiPing
 
     # Create a MultiPing object to test three hosts / addresses
-    mp = MultiPing(["8.8.8.8", "youtube.com", "127.0.0.1"])
+    mp = MultiPing(["8.8.8.8", "youtube.com", "127.0.0.1"
+                    "2001:4860:4860::8888"])
 
     # Send the pings to those addresses
     mp.send()
