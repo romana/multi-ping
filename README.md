@@ -1,16 +1,20 @@
 # MultiPing: A pure-python implemention to monitor IP addresses with pings
 
 MultiPing is a Python library to monitor one or many IP addresses via ICMP echo
-(ping) requests. It works for Python 2 and 3, supports timeouts and retries, is
-small and compact and does not rely on any 3rd party packages, aside from
-what's included in Python.
+(ping) requests. Features:
+
+* It works for Python 2 and 3.
+* Supports timeouts and retries.
+* Supports IPv4 as well as IPv6.
+* Small and compact and does not rely on any 3rd party packages, aside from
+  what's included in Python.
 
 It is ideally suited to monitor large numbers of hosts in clusters, but is just
 as suitable to check on a single address.
 
-MultiPing was developed for the
-[vpc-router](https://github.com/romana/vpc-router) project, but can be used
-on its own.
+MultiPing was originally developed for the
+[vpc-router](https://github.com/romana/vpc-router) project, but can easily
+be used on its own.
 
 ## Installation
 
@@ -64,7 +68,10 @@ respond in time. The results may be processed like this:
     if no_responses:
         print "These addresses did not respond: %s" % ", ".join(no_responses)
         # Sending pings once more, but just to those addresses that have not
-        # responded, yet.
+        # responded, yet. The MultiPing object 'mp' remembers the state of
+        # which address has responded already, so that another call to
+        # send() just generates packets to those hosts from which we haven't
+        # heard back, yet.
         mp.send()
         responses, no_responses = mp.receive(1)
 
@@ -75,7 +82,7 @@ left for which no response has been received yet then this will resend pings
 to those remaining addresses.
 
 A convenient `multi_ping()` function is provided, which implements retries and
-delivers results in a single function call:
+delivers results in a single and simple function call:
 
     from multiping import multi_ping
 
@@ -84,7 +91,7 @@ delivers results in a single function call:
     # Ping the addresses up to 4 times (initial ping + 3 retries), over the
     # course of 2 seconds. This means that for those addresses that do not
     # respond another ping will be sent every 0.5 seconds.
-    responses, no_responses = multi_ping(addrs, 2, 3)
+    responses, no_responses = multi_ping(addrs, timeout=2, retry=3)
 
 Also see the `demo.py` file for more examples.
 

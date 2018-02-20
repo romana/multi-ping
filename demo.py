@@ -67,12 +67,16 @@ if __name__ == "__main__":
               no_response)
     print("")
 
+    # Having control over your retries is powerful and gives you lots of
+    # flexibility, but sometimes you don't want to deal with it manually and
+    # just want 'the right thing' to be done for you.
+    #
     # Fortunately, MultiPing provides a ready-made function to do the retry for
-    # you, called send_receive(). Specify the overall timeout and the number of
+    # you, called multi_ping(). Specify the overall timeout and the number of
     # additional retries (which are attempted within this timeout). Omit the
     # 'retry' parameter or set to 0 and there will only be a single send.
     print("sending again, waiting with retries via provided send_receive()")
-    responses, no_response = multi_ping(addrs, 0.5, 2)
+    responses, no_response = multi_ping(addrs, timeout=0.5, retry=2)
     print("    reponses: %s" % list(responses.keys()))
     if no_responses:
         print("    no response received in time, even after retries: %s" %
