@@ -133,8 +133,7 @@ class MultiPing(object):
 
         except socket.error as e:
             if e.errno == 1:
-                raise MultiPingError("Root privileges required for sending "
-                                     "ICMP")
+                return socket.socket(family, socket.SOCK_DGRAM, proto)
             # Re-raise any other error
             raise
 
