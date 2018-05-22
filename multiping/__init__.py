@@ -42,6 +42,10 @@ _ICMPV6_PAYLOAD_OFFSET = _ICMPV6_HDR_OFFSET + 8
 _ICMPV6_ECHO_REQUEST   = 128
 _ICMPV6_ECHO_REPLY     = 129
 
+_IPPROTO_ICMPV6        = (socket.IPPROTO_ICMPV6
+                          if hasattr(socket, 'IPPROTO_ICMPV6')
+                          else 58)
+
 
 class MultiPingError(Exception):
     """
@@ -127,7 +131,7 @@ class MultiPing(object):
         """
         try:
             proto = socket.IPPROTO_ICMP if family == socket.AF_INET \
-                    else socket.IPPROTO_ICMPV6
+                    else _IPPROTO_ICMPV6
 
             return socket.socket(family, socket.SOCK_RAW, proto)
 
