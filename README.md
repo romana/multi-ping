@@ -95,3 +95,9 @@ delivers results in a single and simple function call:
 
 Also see the `demo.py` file for more examples.
 
+If there are any names or addresses in the list of target addresses, which
+cannot be resolved or looked up, a `socket.gaierror` is raised. This can be
+surpressed if the `silent_lookup_errors` parameter flag is set. Either as named
+parameter for the `multi_ping` function or when a `MultiPing` object is
+created.
+

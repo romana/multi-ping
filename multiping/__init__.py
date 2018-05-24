@@ -55,9 +55,20 @@ class MultiPingError(Exception):
     pass
 
 
+class MultiPingSocketError(socket.gaierror):
+    """
+    A wrapper for a socket error.
+
+    By wrapping socket.gaierror we can add a useful message without having to
+    change already existing try-except blocks that look for socket.gaierror.
+
+    """
+    pass
+
+
 class MultiPing(object):
 
-    def __init__(self, dest_addrs, sock=None):
+    def __init__(self, dest_addrs, sock=None, ignore_lookup_errors=False):
         """
         Initialize a new multi ping object. This takes the configuration
         consisting of the list of destination addresses and an optional socket
@@ -80,31 +91,55 @@ class MultiPing(object):
             raise MultiPingError("Cannot send ICMP echo request to more than "
                                  "65535 addresses at the same time.")
 
+        self._ignore_lookup_errors = ignore_lookup_errors
+
         # Get the IP addresses for every specified target: We allow
         # specification of the ping targets by name, so a name lookup needs to
         # be performed. If we get a mixture of IPv4 and IPv6 answers then we
         # will prefer the IPv4 addresses.
-        self._dest_addrs = []
+        self._dest_addrs          = []
+        self._unprocessed_targets = []
         for d in dest_addrs:
-            addr_info = socket.getaddrinfo(d, None)
-            # For each specified address or name we may get multiple entries
-            # back from getaddrinfo(). We prefer IPv4 addresses, so we need to
-            # search through the returned results to see if we find one of
-            # those.
-            addr = None
-            for res in addr_info:
-                if res[0] == socket.AF_INET:
-                    # We found the first IPv4 address! Use this result
-                    addr = res[4][0]
-                    break
-                elif not addr:
-                    # Otherwise, we record the first of the IPv6 addresses
-                    addr = res[4][0]
-                # Continue the loop, since we maybe only have had IPv6
-                # addresses so far and some IPv4 ones are still to come.
+            try:
+                addr_info = socket.getaddrinfo(d, None)
+
+                # For each specified address or name we may get multiple
+                # entries back from getaddrinfo(). We prefer IPv4 addresses, so
+                # we need to search through the returned results to see if we
+                # find one of those.
+                addr = None
+                for res in addr_info:
+                    if res[0] == socket.AF_INET:
+                        # We found the first IPv4 address! Use this result
+                        addr = res[4][0]
+                        break
+                    elif not addr:
+                        # Otherwise, we record the first of the IPv6 addresses
+                        addr = res[4][0]
+                    # Continue the loop, since we maybe only have had IPv6
+                    # addresses so far and some IPv4 ones are still to come.
+
+            except socket.gaierror:
+                if self._ignore_lookup_errors:
+                    # Silently ignore name lookup errors. We can't do anything
+                    # for those hosts. They will be collected in a list of
+                    # unprocessed targets, which will be added to the 'no
+                    # resuts' return list.
+                    addr = None
+                else:
+                    # User wanted to be notified about names/addresses that
+                    # can't be looked up, so we are re-raising the socket
+                    # error that we received. This exception class has
+                    # socket.gaierror as base class, so try-except blocks that
+                    # are looking for socket.gaierror will still work.
+                    raise MultiPingSocketError("Cannot lookup '%s'" % d)
 
             if addr:
                 self._dest_addrs.append(addr)
+            else:
+                # We had a problem collecting information for an address. Can't
+                # process those.
+                self._unprocessed_targets.append(d)
 
         self._id_to_addr      = {}
         self._remaining_ids   = None
@@ -400,10 +435,16 @@ class MultiPing(object):
             end_time = time.time()
             remaining_time = remaining_time - (end_time - start_time)
 
-        return (results, [self._id_to_addr[i] for i in self._remaining_ids])
+        no_results_so_far = [self._id_to_addr[i] for i in self._remaining_ids]
+        if self._ignore_lookup_errors:
+            # With this flag set, names/addresses that we couldn't look up will
+            # just be added to the no-results return list. Without the flag
+            # those addresses would have caused an exception earlier.
+            no_results_so_far.extend(self._unprocessed_targets)
+        return (results, no_results_so_far)
 
 
-def multi_ping(dest_addrs, timeout, retry=0):
+def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
     """
     Combine send and receive measurement into single function.
 
@@ -416,6 +457,10 @@ def multi_ping(dest_addrs, timeout, retry=0):
 
     If 'retry' is set to 0 then only a single packet is sent to each
     address.
+
+    If 'ignore_lookup_errors' is set then any issues with resolving target
+    names or looking up their address information will silently be ignored.
+    Those targets simply appear in the 'no_results' return list.
 
     """
     retry = int(retry)
@@ -430,7 +475,7 @@ def multi_ping(dest_addrs, timeout, retry=0):
     if retry_timeout < 0.1:
         raise MultiPingError("Time between ping retries < 0.1 seconds")
 
-    mp = MultiPing(dest_addrs)
+    mp = MultiPing(dest_addrs, ignore_lookup_errors=ignore_lookup_errors)
 
     results = {}
     retry_count = 0

@@ -24,6 +24,7 @@ from multiping import multi_ping
 
 if __name__ == "__main__":
 
+    # A list of addresses and names, which should be pinged.
     addrs = ["8.8.8.8", "cnn.com", "127.0.0.1", "youtube.com",
              "2001:4860:4860::8888"]
 
@@ -75,8 +76,15 @@ if __name__ == "__main__":
     # you, called multi_ping(). Specify the overall timeout and the number of
     # additional retries (which are attempted within this timeout). Omit the
     # 'retry' parameter or set to 0 and there will only be a single send.
+    #
+    # We are also adding an address we won't be able to resolve and set the
+    # 'ignore_lookup_errors' flag, to show that those can be ignored if wanted.
+    # They will just appear in the 'no response' return list. If the flag is
+    # not set then an exception would be thrown.
+    addrs.append("cannot.resolve.thiscom")
     print("sending again, waiting with retries via provided send_receive()")
-    responses, no_response = multi_ping(addrs, timeout=0.5, retry=2)
+    responses, no_response = multi_ping(addrs, timeout=0.5, retry=2,
+                                        ignore_lookup_errors=True)
     print("    reponses: %s" % list(responses.keys()))
     if no_responses:
         print("    no response received in time, even after retries: %s" %
