@@ -101,3 +101,8 @@ surpressed if the `silent_lookup_errors` parameter flag is set. Either as named
 parameter for the `multi_ping` function or when a `MultiPing` object is
 created.
 
+To avoid burst issues with packet loss on some networks, the `delay` parameter
+can be used with the `multi_ping` function or when a `MultiPing` object is
+created. This delay in seconds will be applied between every ICMP request.
+For milliseconds delay simply use floating number, e.g.: `0.001` for 1 ms.
+
