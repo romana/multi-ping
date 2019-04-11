@@ -71,7 +71,8 @@ class MultiPingSocketError(socket.gaierror):
 
 class MultiPing(object):
 
-    def __init__(self, dest_addrs, sock=None, ignore_lookup_errors=False):
+    def __init__(self, dest_addrs, sock=None, ignore_lookup_errors=False,
+                 delay=0):
         """
         Initialize a new multi ping object. This takes the configuration
         consisting of the list of destination addresses and an optional socket
@@ -95,6 +96,7 @@ class MultiPing(object):
                                  "65535 addresses at the same time.")
 
         self._ignore_lookup_errors = ignore_lookup_errors
+        self._delay = delay     # delay between each ICMP request
 
         # Get the IP addresses for every specified target: We allow
         # specification of the ping targets by name, so a name lookup needs to
@@ -301,6 +303,11 @@ class MultiPing(object):
             # of the current time stamp. This is returned to us in the
             # response and allows us to calculate the 'ping time'.
             self._send_ping(addr, payload=struct.pack("d", time.time()))
+            # Some system/network doesn't support the bombarding of ICMP
+            # request and lead to a lot of packet loss and retry, therefore
+            # introcude a small delay between each request.
+            if self._delay > 0:
+                time.sleep(self._delay)
 
     def _read_all_from_socket(self, timeout):
         """
@@ -457,7 +464,7 @@ class MultiPing(object):
         return (results, no_results_so_far)
 
 
-def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
+def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False, delay=0):
     """
     Combine send and receive measurement into single function.
 
@@ -475,10 +482,14 @@ def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
     names or looking up their address information will silently be ignored.
     Those targets simply appear in the 'no_results' return list.
 
+    The 'delay' parameter can be used to introduced a small delay between
+    each requests.
+
     """
     retry = int(retry)
     if retry < 0:
         retry = 0
+
 
     timeout = float(timeout)
     if timeout < 0.1:
@@ -488,7 +499,8 @@ def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
     if retry_timeout < 0.1:
         raise MultiPingError("Time between ping retries < 0.1 seconds")
 
-    mp = MultiPing(dest_addrs, ignore_lookup_errors=ignore_lookup_errors)
+    mp = MultiPing(dest_addrs, ignore_lookup_errors=ignore_lookup_errors,
+                   delay=delay)
 
     results = {}
     retry_count = 0
