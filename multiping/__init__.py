@@ -231,7 +231,7 @@ class MultiPing(object):
         # - ICMP code = 0 (unsigned byte)
         # - checksum  = 0 (unsigned short)
         # - packet id     (unsigned short)
-        # - sequence  = 0 (unsigned short)  This doesn't have to be 0.
+        # - sequence  = pid (unsigned short)
         dummy_header = bytearray(
                             struct.pack(_ICMP_HDR_PACK_FORMAT,
                                         icmp_echo_request, 0, 0,
@@ -292,6 +292,10 @@ class MultiPing(object):
             # need to trim it down.
             self._last_used_id = int(time.time()) & 0xffff
 
+        # Reset the _id_to_addr, we are now retrying to send new request with
+        # new ID. Reply of a request that have been retried will be ignored.
+        self._id_to_addr = {}
+
         # Send ICMPecho to all addresses...
         for addr in all_addrs:
             # Make a unique ID, wrapping around at 65535.
@@ -308,6 +312,9 @@ class MultiPing(object):
             # introcude a small delay between each request.
             if self._delay > 0:
                 time.sleep(self._delay)
+
+        # Keep track of the current request IDs to be used in the receive
+        self._remaining_ids = list(self._id_to_addr.keys())
 
     def _read_all_from_socket(self, timeout):
         """
@@ -331,9 +338,9 @@ class MultiPing(object):
         try:
             self._sock.settimeout(timeout)
             while True:
-                p = self._sock.recv(64)
+                p, src_addr = self._sock.recvfrom(128)
                 # Store the packet and the current time
-                pkts.append((bytearray(p), time.time()))
+                pkts.append((src_addr, bytearray(p), time.time()))
                 # Continue the loop to receive any additional packets that
                 # may have arrived at this point. Changing the socket to
                 # non-blocking (by setting the timeout to 0), so that we'll
@@ -360,8 +367,8 @@ class MultiPing(object):
             try:
                 self._sock6.settimeout(timeout)
                 while True:
-                    p = self._sock6.recv(128)
-                    pkts.append((bytearray(p), time.time()))
+                    p, src_addr = self._sock6.recvfrom(128)
+                    pkts.append((src_addr, bytearray(p), time.time()))
                     self._sock6.settimeout(0)
             except socket.timeout:
                 pass
@@ -391,15 +398,6 @@ class MultiPing(object):
 
         self._receive_has_been_called = True
 
-        # Continue with any remaining IDs for which we hadn't received an
-        # answer, yet...
-        if self._remaining_ids is None:
-            # ... but if we don't have any stored yet, then we are just calling
-            # receive() for the first time afer a send. We initialize
-            # the list of expected IDs from all the IDs we created during the
-            # send().
-            self._remaining_ids = list(self._id_to_addr.keys())
-
         if len(self._remaining_ids) == 0:
             raise MultiPingError("No responses pending")
 
@@ -412,7 +410,7 @@ class MultiPing(object):
             start_time = time.time()
             pkts = self._read_all_from_socket(remaining_time)
 
-            for pkt, resp_receive_time in pkts:
+            for src_addr, pkt, resp_receive_time in pkts:
                 # Extract the ICMP ID of the response
 
                 try:
@@ -435,7 +433,8 @@ class MultiPing(object):
                         payload = pkt[_ICMP_PAYLOAD_OFFSET:]
 
                     if pkt_ident == self.ident and \
-                       pkt_id in self._remaining_ids:
+                       pkt_id in self._remaining_ids and \
+                       src_addr[0] == self._id_to_addr[pkt_id]:
                         # The sending timestamp was encoded in the echo request
                         # body and is now returned to us in the response. Note
                         # that network byte order doesn't matter here, since we
