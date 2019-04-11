@@ -71,7 +71,8 @@ class MultiPingSocketError(socket.gaierror):
 
 class MultiPing(object):
 
-    def __init__(self, dest_addrs, sock=None, ignore_lookup_errors=False):
+    def __init__(self, dest_addrs, sock=None, ignore_lookup_errors=False,
+                 delay=0):
         """
         Initialize a new multi ping object. This takes the configuration
         consisting of the list of destination addresses and an optional socket
@@ -95,6 +96,7 @@ class MultiPing(object):
                                  "65535 addresses at the same time.")
 
         self._ignore_lookup_errors = ignore_lookup_errors
+        self._delay = delay     # delay between each ICMP request
 
         # Get the IP addresses for every specified target: We allow
         # specification of the ping targets by name, so a name lookup needs to
@@ -145,6 +147,7 @@ class MultiPing(object):
                 self._unprocessed_targets.append(d)
 
         self._id_to_addr      = {}
+        self._addr_retry      = {}
         self._remaining_ids   = None
         self._last_used_id    = None
         self._time_stamp_size = struct.calcsize("d")
@@ -229,7 +232,7 @@ class MultiPing(object):
         # - ICMP code = 0 (unsigned byte)
         # - checksum  = 0 (unsigned short)
         # - packet id     (unsigned short)
-        # - sequence  = 0 (unsigned short)  This doesn't have to be 0.
+        # - sequence  = pid (unsigned short)
         dummy_header = bytearray(
                             struct.pack(_ICMP_HDR_PACK_FORMAT,
                                         icmp_echo_request, 0, 0,
@@ -279,6 +282,7 @@ class MultiPing(object):
         # Collect all the addresses for which we have not seen responses yet.
         if not self._receive_has_been_called:
             all_addrs = self._dest_addrs
+            self._addr_retry = {addr: -1 for addr in all_addrs}
         else:
             all_addrs = [a for (i, a) in list(self._id_to_addr.items())
                          if i in self._remaining_ids]
@@ -290,8 +294,13 @@ class MultiPing(object):
             # need to trim it down.
             self._last_used_id = int(time.time()) & 0xffff
 
+        # Reset the _id_to_addr, we are now retrying to send new request with
+        # new ID. Reply of a request that have been retried will be ignored.
+        self._id_to_addr = {}
+
         # Send ICMPecho to all addresses...
         for addr in all_addrs:
+            self._addr_retry[addr] += 1
             # Make a unique ID, wrapping around at 65535.
             self._last_used_id = (self._last_used_id + 1) & 0xffff
             # Remember the address for each ID so we can produce meaningful
@@ -301,6 +310,14 @@ class MultiPing(object):
             # of the current time stamp. This is returned to us in the
             # response and allows us to calculate the 'ping time'.
             self._send_ping(addr, payload=struct.pack("d", time.time()))
+            # Some system/network doesn't support the bombarding of ICMP
+            # request and lead to a lot of packet loss and retry, therefore
+            # introcude a small delay between each request.
+            if self._delay > 0:
+                time.sleep(self._delay)
+
+        # Keep track of the current request IDs to be used in the receive
+        self._remaining_ids = list(self._id_to_addr.keys())
 
     def _read_all_from_socket(self, timeout):
         """
@@ -324,9 +341,9 @@ class MultiPing(object):
         try:
             self._sock.settimeout(timeout)
             while True:
-                p = self._sock.recv(64)
+                p, src_addr = self._sock.recvfrom(128)
                 # Store the packet and the current time
-                pkts.append((bytearray(p), time.time()))
+                pkts.append((src_addr, bytearray(p), time.time()))
                 # Continue the loop to receive any additional packets that
                 # may have arrived at this point. Changing the socket to
                 # non-blocking (by setting the timeout to 0), so that we'll
@@ -353,8 +370,8 @@ class MultiPing(object):
             try:
                 self._sock6.settimeout(timeout)
                 while True:
-                    p = self._sock6.recv(128)
-                    pkts.append((bytearray(p), time.time()))
+                    p, src_addr = self._sock6.recvfrom(128)
+                    pkts.append((src_addr, bytearray(p), time.time()))
                     self._sock6.settimeout(0)
             except socket.timeout:
                 pass
@@ -384,15 +401,6 @@ class MultiPing(object):
 
         self._receive_has_been_called = True
 
-        # Continue with any remaining IDs for which we hadn't received an
-        # answer, yet...
-        if self._remaining_ids is None:
-            # ... but if we don't have any stored yet, then we are just calling
-            # receive() for the first time afer a send. We initialize
-            # the list of expected IDs from all the IDs we created during the
-            # send().
-            self._remaining_ids = list(self._id_to_addr.keys())
-
         if len(self._remaining_ids) == 0:
             raise MultiPingError("No responses pending")
 
@@ -405,7 +413,7 @@ class MultiPing(object):
             start_time = time.time()
             pkts = self._read_all_from_socket(remaining_time)
 
-            for pkt, resp_receive_time in pkts:
+            for src_addr, pkt, resp_receive_time in pkts:
                 # Extract the ICMP ID of the response
 
                 try:
@@ -428,7 +436,8 @@ class MultiPing(object):
                         payload = pkt[_ICMP_PAYLOAD_OFFSET:]
 
                     if pkt_ident == self.ident and \
-                       pkt_id in self._remaining_ids:
+                       pkt_id in self._remaining_ids and \
+                       src_addr[0] == self._id_to_addr[pkt_id]:
                         # The sending timestamp was encoded in the echo request
                         # body and is now returned to us in the response. Note
                         # that network byte order doesn't matter here, since we
@@ -437,7 +446,8 @@ class MultiPing(object):
                         req_sent_time = struct.unpack(
                             "d", payload[:self._time_stamp_size])[0]
                         results[self._id_to_addr[pkt_id]] = \
-                            resp_receive_time - req_sent_time
+                            {'time': resp_receive_time - req_sent_time,
+                             'retry': self._addr_retry[src_addr[0]]}
 
                         self._remaining_ids.remove(pkt_id)
                 except IndexError:
@@ -457,7 +467,7 @@ class MultiPing(object):
         return (results, no_results_so_far)
 
 
-def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
+def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False, delay=0):
     """
     Combine send and receive measurement into single function.
 
@@ -475,10 +485,14 @@ def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
     names or looking up their address information will silently be ignored.
     Those targets simply appear in the 'no_results' return list.
 
+    The 'delay' parameter can be used to introduced a small delay between
+    each requests.
+
     """
     retry = int(retry)
     if retry < 0:
         retry = 0
+
 
     timeout = float(timeout)
     if timeout < 0.1:
@@ -488,7 +502,8 @@ def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
     if retry_timeout < 0.1:
         raise MultiPingError("Time between ping retries < 0.1 seconds")
 
-    mp = MultiPing(dest_addrs, ignore_lookup_errors=ignore_lookup_errors)
+    mp = MultiPing(dest_addrs, ignore_lookup_errors=ignore_lookup_errors,
+                   delay=delay)
 
     results = {}
     retry_count = 0

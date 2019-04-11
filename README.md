@@ -57,13 +57,13 @@ Here is an example of how to use MultiPing in your own code:
     responses, no_responses = mp.receive(1)
 
 The `receive()` function returns a tuple containing a results dictionary
-(addresses and response times) as well as a list of addresses that did not
+(addresses with response times and retry) as well as a list of addresses that did not
 respond in time. The results may be processed like this:
 
     ...
 
-    for addr, rtt in responses.items():
-        print "%s responded in %f seconds" % (addr, rtt)
+    for addr, result in responses.items():
+        print "%s responded in %f seconds (retry=%d)" % (addr, result['time'], result['retry'])
 
     if no_responses:
         print "These addresses did not respond: %s" % ", ".join(no_responses)
@@ -100,4 +100,9 @@ cannot be resolved or looked up, a `socket.gaierror` is raised. This can be
 surpressed if the `silent_lookup_errors` parameter flag is set. Either as named
 parameter for the `multi_ping` function or when a `MultiPing` object is
 created.
+
+To avoid burst issues with packet loss on some networks, the `delay` parameter
+can be used with the `multi_ping` function or when a `MultiPing` object is
+created. This delay in seconds will be applied between every ICMP request.
+For milliseconds delay simply use floating number, e.g.: `0.001` for 1 ms.
 
