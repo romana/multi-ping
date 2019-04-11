@@ -147,6 +147,7 @@ class MultiPing(object):
                 self._unprocessed_targets.append(d)
 
         self._id_to_addr      = {}
+        self._addr_retry      = {}
         self._remaining_ids   = None
         self._last_used_id    = None
         self._time_stamp_size = struct.calcsize("d")
@@ -281,6 +282,7 @@ class MultiPing(object):
         # Collect all the addresses for which we have not seen responses yet.
         if not self._receive_has_been_called:
             all_addrs = self._dest_addrs
+            self._addr_retry = {addr: -1 for addr in all_addrs}
         else:
             all_addrs = [a for (i, a) in list(self._id_to_addr.items())
                          if i in self._remaining_ids]
@@ -298,6 +300,7 @@ class MultiPing(object):
 
         # Send ICMPecho to all addresses...
         for addr in all_addrs:
+            self._addr_retry[addr] += 1
             # Make a unique ID, wrapping around at 65535.
             self._last_used_id = (self._last_used_id + 1) & 0xffff
             # Remember the address for each ID so we can produce meaningful
@@ -443,7 +446,8 @@ class MultiPing(object):
                         req_sent_time = struct.unpack(
                             "d", payload[:self._time_stamp_size])[0]
                         results[self._id_to_addr[pkt_id]] = \
-                            resp_receive_time - req_sent_time
+                            {'time': resp_receive_time - req_sent_time,
+                             'retry': self._addr_retry[src_addr[0]]}
 
                         self._remaining_ids.remove(pkt_id)
                 except IndexError:
