@@ -393,9 +393,6 @@ class MultiPing(object):
             # send().
             self._remaining_ids = list(self._id_to_addr.keys())
 
-        if len(self._remaining_ids) == 0:
-            raise MultiPingError("No responses pending")
-
         remaining_time = timeout
         results        = {}
 
