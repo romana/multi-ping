@@ -160,12 +160,25 @@ class MultiPing(object):
         if sock:
             self._sock = sock
         else:
-            self._sock = self._open_icmp_socket(socket.AF_INET)
-            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
+            self._open_ipv4_icmp_socket()
+            self._open_ipv6_icmp_socket()
+
+    def _open_ipv4_icmp_socket(self):
+        self._sock = self._open_icmp_socket(socket.AF_INET)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
+
+    def _open_ipv6_icmp_socket(self, ignore_failures=True):
+        try:
             self._sock6 = self._open_icmp_socket(socket.AF_INET6)
             self._sock6.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
+        except socket.error:
+            if ignore_failures:
+                return
+            else:
+                raise MultiPingSocketError("IPv6 address family not supported")
 
-    def _open_icmp_socket(self, family):
+    @staticmethod
+    def _open_icmp_socket(family):
         """
         Opens a socket suitable for sending/receiving ICMP echo
         requests/responses.
