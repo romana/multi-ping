@@ -158,7 +158,8 @@ class MultiPing(object):
 
         # Open an ICMP socket, if we weren't provided with one already
         if sock:
-            self._sock = sock
+            self._sock  = sock
+            self._sock6 = None
         else:
             self._open_ipv4_icmp_socket()
             self._open_ipv6_icmp_socket()
@@ -173,6 +174,7 @@ class MultiPing(object):
             self._sock6.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
         except socket.error:
             if ignore_failures:
+                self._sock6 = None
                 return
             else:
                 raise MultiPingSocketError("IPv6 address family not supported")
@@ -468,10 +470,11 @@ class MultiPing(object):
 
     def __del__(self):
         """
-            Close sockets descriptors.
+        Close sockets descriptors.
         """
-        _sock.close()   # TODO: probably need add some verifications.
-        _sock6.close()
+        self._sock.close()
+        if self._sock6:
+            self._sock6.close()
 
 
 def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
