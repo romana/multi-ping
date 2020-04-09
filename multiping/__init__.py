@@ -466,6 +466,13 @@ class MultiPing(object):
             no_results_so_far.extend(self._unprocessed_targets)
         return (results, no_results_so_far)
 
+    def __del__(self):
+        """
+            Close sockets descriptors.
+        """
+        _sock.close()   # TODO: probably need add some verifications.
+        _sock6.close()
+
 
 def multi_ping(dest_addrs, timeout, retry=0, ignore_lookup_errors=False):
     """
