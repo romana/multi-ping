@@ -16,37 +16,36 @@ limitations under the License.
 """
 
 from os import path
-
 from setuptools import setup, find_packages
-from codecs import open
+
 
 import multiping
 
-
 here = path.abspath(path.dirname(__file__))
-
 
 try:
     with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
         long_description = f.read()
-except (IOError):
+except IOError:
     with open(path.join(here, 'README.md'), encoding='utf-8') as f:
         long_description = f.read()
 
-
 setup(
-    name                 = 'multiping',
-    version              = multiping.__version__,
-    url                  = "http://github.com/romana/multi-ping/",
-    license              = "Apache Software License",
-    author               = "Juergen Brendel",
-    author_email         = "jbrendel@romana.io",
-    description          = "Pure python library to send and receive ICMPecho "
-                           "request (ping) to monitor IP addresses",
-    long_description     = long_description,
-    packages             = find_packages(),
-    include_package_data = True,
-    classifiers          = [
+    name='multiping',
+    version=multiping.__version__,
+    url="http://github.com/romana/multi-ping/",
+    license="Apache Software License",
+    author="Juergen Brendel",
+    author_email="jbrendel@romana.io",
+    description="Pure python library to send and receive ICMPecho "
+                "request (ping) to monitor IP addresses",
+    long_description=long_description,
+    packages=find_packages(),
+    include_package_data=True,
+    tests_require=[
+        'tox'
+    ],
+    classifiers=[
         'Programming Language :: Python',
         'Natural Language :: English',
         'Environment :: Plugins',
